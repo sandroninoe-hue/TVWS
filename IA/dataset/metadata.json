@@ -1,0 +1,24 @@
+{
+  "tipo": "sintetico",
+  "n_muestras": {
+    "train": 698,
+    "val": 149,
+    "test": 153
+  },
+  "balance_clases": {
+    "libre": 0.65,
+    "ocupado": 0.35
+  },
+  "n_fft": 512,
+  "n_canales": 9,
+  "semilla": 42,
+  "normalizacion": "percentil_5_95",
+  "dc_offset_corr": true,
+  "señales_sim": [
+    "ISDB-Tb (lóbulo plano + flancos coseno alzado)",
+    "ruido térmico gaussiano",
+    "artefacto DC RTL-SDR",
+    "ruido de fase",
+    "respuesta frecuencia no plana RTL-SDR"
+  ]
+}

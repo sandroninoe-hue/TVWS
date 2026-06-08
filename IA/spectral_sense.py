@@ -33,7 +33,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from sklearn.metrics import roc_auc_score, f1_score
+from sklearn.metrics import roc_auc_score, fbeta_score
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -342,25 +342,29 @@ class TVWSDataset(Dataset):
 
 def calcular_pos_weight(dataset_dir: str) -> torch.Tensor:
     """
-    Calcula el peso de clase positiva (pos_weight) para BCEWithLogitsLoss
-    a partir de la distribución real del dataset de entrenamiento.
+    Calcula el peso de clase positiva (pos_weight) para BCEWithLogitsLoss.
+    Ignora posiciones con etiqueta -1 (canal desconocido en esa captura).
     """
     suma_ocupado = np.zeros(N_CANALES_MAX)
-    n_total      = 0
+    suma_libre   = np.zeros(N_CANALES_MAX)
     directorio   = os.path.join(dataset_dir, "train")
 
     for archivo in os.listdir(directorio):
         if not archivo.endswith(".npz"):
             continue
-        data = np.load(os.path.join(directorio, archivo))
-        suma_ocupado += data["etiquetas"].astype(float)
-        n_total      += 1
+        data      = np.load(os.path.join(directorio, archivo))
+        etiquetas = data["etiquetas"].astype(float)
+        for i, e in enumerate(etiquetas):
+            if e >= 0:
+                suma_ocupado[i] += e
+                suma_libre[i]   += (1.0 - e)
 
-    if n_total == 0:
-        raise RuntimeError("Dataset vacío")
+    if suma_ocupado.sum() == 0:
+        raise RuntimeError("Dataset vacío o sin etiquetas válidas")
 
-    suma_libre = n_total - suma_ocupado
     pos_weight = suma_libre / (suma_ocupado + 1e-6)
+    # Recortar valores extremos (canales sin muestras ocupadas dan pos_weight muy alto)
+    pos_weight = np.clip(pos_weight, 0.5, 10.0)
     print(f"pos_weight calculado: {np.round(pos_weight, 2)}")
     return torch.tensor(pos_weight, dtype=torch.float32)
 
@@ -385,16 +389,26 @@ def evaluar(modelo: nn.Module, loader: DataLoader,
     todas_probs = np.vstack(todas_probs)   # (N, 9)
     todas_etiq  = np.vstack(todas_etiq)    # (N, 9)
 
-    # AUC-ROC por canal (ignorar canales sin positivos en val)
+    # AUC-ROC por canal — solo posiciones con etiqueta válida (>= 0) y ambas clases
     aucs = []
     for canal in range(todas_etiq.shape[1]):
-        if todas_etiq[:, canal].sum() > 0:
-            aucs.append(roc_auc_score(todas_etiq[:, canal], todas_probs[:, canal]))
+        etiq_c = todas_etiq[:, canal]
+        prob_c = todas_probs[:, canal]
+        mask   = etiq_c >= 0                     # ignorar etiquetas -1
+        etiq_c = etiq_c[mask]
+        prob_c = prob_c[mask]
+        if len(etiq_c) > 0 and len(np.unique(etiq_c)) == 2:
+            aucs.append(roc_auc_score(etiq_c, prob_c))
 
-    # F1 con beta=2 (penaliza más los falsos negativos)
-    predicciones = (todas_probs >= UMBRAL_LIBRE).astype(int)
-    f1_beta2 = f1_score(todas_etiq.flatten(), predicciones.flatten(),
-                        beta=2, zero_division=0)
+    # F1 con beta=2 — solo sobre posiciones con etiqueta válida (>= 0)
+    mascara      = todas_etiq.flatten() >= 0
+    etiq_validas = todas_etiq.flatten()[mascara].astype(int)
+    pred_validas = (todas_probs.flatten()[mascara] >= UMBRAL_LIBRE).astype(int)
+    if len(np.unique(etiq_validas)) > 1:
+        f1_beta2 = fbeta_score(etiq_validas, pred_validas,
+                               beta=2, average="binary", zero_division=0)
+    else:
+        f1_beta2 = 0.0   # solo una clase presente en validación
 
     return {
         "perdida":   perdida_total / len(loader),
@@ -432,10 +446,15 @@ def entrenar(dataset_dir: str, salida_dir: str,
     # Datasets y loaders
     ds_train = TVWSDataset(dataset_dir, split="train", augmentar=True)
     ds_val   = TVWSDataset(dataset_dir, split="val",   augmentar=False)
+    usar_pin_memory = device.type != "cpu"
+    # num_workers=0 en Windows: evita problemas con multiprocessing en spawn
+    n_workers    = 0 if os.name == "nt" else 2
     loader_train = DataLoader(ds_train, batch_size=batch_size,
-                               shuffle=True,  num_workers=2, pin_memory=True)
+                               shuffle=True,  num_workers=n_workers,
+                               pin_memory=usar_pin_memory)
     loader_val   = DataLoader(ds_val,   batch_size=batch_size,
-                               shuffle=False, num_workers=2, pin_memory=True)
+                               shuffle=False, num_workers=n_workers,
+                               pin_memory=usar_pin_memory)
     print(f"Train: {len(ds_train)} muestras | Val: {len(ds_val)} muestras")
 
     # Modelo
@@ -514,10 +533,15 @@ def entrenar(dataset_dir: str, salida_dir: str,
                 print(f"Early stopping en época {epoca} (sin mejora en {paciencia} épocas)")
                 break
 
-    # Cargar mejores pesos
-    checkpoint = torch.load(ruta_mejor, map_location=device)
-    modelo.load_state_dict(checkpoint["model_state"])
-    print(f"\nEntrenamiento completado. Mejor AUC: {mejor_auc:.4f}")
+    # Cargar mejores pesos si se guardaron, si no usar los actuales
+    if os.path.exists(ruta_mejor):
+        checkpoint = torch.load(ruta_mejor, map_location=device,
+                                weights_only=True)
+        modelo.load_state_dict(checkpoint["model_state"])
+        print(f"\nEntrenamiento completado. Mejor AUC: {mejor_auc:.4f}")
+    else:
+        print(f"\nEntrenamiento completado (sin checkpoint guardado — AUC no mejoró).")
+        print("Consejo: aumentar --n_muestras del dataset para obtener métricas válidas.")
 
     # Guardar historial
     with open(os.path.join(salida_dir, "historial.json"), "w") as f:

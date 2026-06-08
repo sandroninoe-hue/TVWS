@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# requirements.txt — SpectralSense TVWS
+# Windows 10/11 x64, Python 3.11 o 3.12, CPU puro
+#
+# INSTALACIÓN:
+#   pip install -r requirements.txt
+#
+# NOTA GPU: La RX 580 no tiene soporte ROCm en Windows.
+# Para entrenamiento con GPU usar Google Colab Pro (T4).
+# Este requirements es para captura, preprocesamiento e inferencia local.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Deep Learning (CPU) ──────────────────────────────────────────────────────
+torch==2.9.0
+torchvision==0.24.0
+
+# ── ONNX ────────────────────────────────────────────────────────────────────
+onnx==1.18.0
+onnxruntime==1.26.0
+onnxscript==0.7.0
+
+# ── Procesamiento numérico ───────────────────────────────────────────────────
+numpy==1.26.4
+scipy==1.13.1
+
+# ── Machine Learning / métricas ─────────────────────────────────────────────
+scikit-learn==1.4.2
+
+# ── Visualización ────────────────────────────────────────────────────────────
+matplotlib==3.9.0
+
+# ── Captura SDR (RTL-SDR V4) ─────────────────────────────────────────────────
+pyrtlsdr==0.2.93
+
+# ── Utilidades ───────────────────────────────────────────────────────────────
+tqdm==4.66.4
+python-dotenv==1.0.1
