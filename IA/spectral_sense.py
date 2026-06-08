@@ -400,15 +400,16 @@ def evaluar(modelo: nn.Module, loader: DataLoader,
         if len(etiq_c) > 0 and len(np.unique(etiq_c)) == 2:
             aucs.append(roc_auc_score(etiq_c, prob_c))
 
-    # F1 con beta=2 — solo sobre posiciones con etiqueta válida (>= 0)
+    # F1 con beta=2 — umbral 0.5 para métricas de entrenamiento
+    # (UMBRAL_LIBRE=0.20 es para operación en campo, no para evaluar el modelo)
     mascara      = todas_etiq.flatten() >= 0
     etiq_validas = todas_etiq.flatten()[mascara].astype(int)
-    pred_validas = (todas_probs.flatten()[mascara] >= UMBRAL_LIBRE).astype(int)
-    if len(np.unique(etiq_validas)) > 1:
+    pred_validas = (todas_probs.flatten()[mascara] >= 0.5).astype(int)
+    if len(np.unique(etiq_validas)) > 1 and len(np.unique(pred_validas)) > 1:
         f1_beta2 = fbeta_score(etiq_validas, pred_validas,
                                beta=2, average="binary", zero_division=0)
     else:
-        f1_beta2 = 0.0   # solo una clase presente en validación
+        f1_beta2 = 0.0
 
     return {
         "perdida":   perdida_total / len(loader),
@@ -578,12 +579,8 @@ def exportar_onnx(modelo: SpectralSenseCNN,
         export_params=True,
         input_names=["psd_input"],
         output_names=["logits"],
-        dynamic_axes={
-            "psd_input": {0: "batch_size"},
-            "logits":    {0: "batch_size"}
-        },
-        opset_version=17,
-        do_constant_folding=True    # optimización: fusionar operaciones constantes
+        opset_version=18,
+        do_constant_folding=True
     )
 
     tamanio_kb = os.path.getsize(ruta_salida) / 1024
