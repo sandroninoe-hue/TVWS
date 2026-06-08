@@ -95,7 +95,7 @@ LPDA 10 dBi
 | Componente | Especificación | Función |
 |------------|---------------|---------|
 | SDR | LimeSDR Mini 2.0 (chip LMS7002M) | RX datos DL + TX uplink |
-| PC | Mini PC Intel N100, 8–16 GB DDR4 | GNU Radio RX/TX (sin IA) |
+| PC | SBC tipo Raspberry | GNU Radio RX/TX (sin IA) |
 | LNA RX | 400–1000 MHz, NF ≤1 dB, ganancia 20 dB | Bajar figura de ruido del RX downlink |
 | Antena enlace | LPDA 400–2700 MHz, 10 dBi, conector N-hembra | RX downlink + TX uplink |
 | Módulo LoRa | SX1262, 915 MHz, TX ≥22 dBm, USB-C CDC-ACM | Canal de control bidireccional |
