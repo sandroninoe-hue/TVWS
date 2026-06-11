@@ -459,15 +459,17 @@ La Opción A complementa al LoRa añadiendo el campo de control directamente en 
 ### 8.1 Estructura del Campo de Control In-Band
 
 ```
-4 subportadoras OFDM dedicadas (sub #254–257), valor en cada símbolo:
+4 subportadoras OFDM dedicadas (sub #254–257), capacidad por símbolo (BPSK):
 
-Sub #254: byte 0 → next_ch (canal destino, 6 bits útiles)
+Sub #254: 1 bit efectivo
 Sub #255: EVITADA — DC offset del LimeSDR
-Sub #256: byte 1 → t_hop (slots de 10 ms, 8 bits)
-Sub #257: bytes 2–3 → CRC-16 del payload (split en 2 subportadoras)
+Sub #256: 1 bit efectivo
+Sub #257: 1 bit efectivo
 
-Cada subportadora lleva un símbolo BPSK de 1 bit efectivo.
-El campo completo = 4 bytes por símbolo OFDM (~89 µs de actualización).
+Capacidad neta instantánea: 3 bits por cada símbolo OFDM.
+Mensaje de control completo: 4 bytes (32 bits) [next_ch + t_hop + padding + CRC-16].
+Transmisión: El mensaje de 32 bits se fragmenta secuencialmente a lo largo de 11 símbolos OFDM.
+Tiempo de actualización total: 11 símbolos × 89 µs ≈ 0.98 milisegundos (< 1 ms).
 ```
 
 ### 8.2 TX del Campo de Control (en GNU Radio Gateway)
